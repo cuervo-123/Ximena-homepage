@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mi TV Station - Listados y Favoritos</title>
+  <style>
+    /* ====== NUEVO: presets de tamaño del monitor ====== */
+    :root { --player-max: 1280px; }          /* Tamaño por defecto (L) */
+    .size-s { --player-max: 700px; }         /* Small */
+    .size-m { --player-max: 960px; }         /* Medium */
+    .size-l { --player-max: 1280px; }        /* Large */
+    .size-xl{ --player-max: 1600px; }        /* Extra Large */
+
+    @keyframes pulse { 0%{transform:scale(1);opacity:.9}50%{transform:scale(1.05);opacity:1}100%{transform:scale(1);opacity:.9} }
+    body{background:linear-gradient(135deg,#0f0f0f,#1a1a1a);color:#e0e0e0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;display:flex;justify-content:center;padding-top:60px}
+    header{position:fixed;top:0;left:0;right:0;height:60px;background:#111826;border-bottom:1px solid #233044;display:flex;align-items:center;justify-content:space-between;padding:0 16px;z-index:1100}
+    .titulo-app{display:flex;align-items:center;gap:10px;font-size:1.25rem;color:#00ffd5;font-weight:700;text-shadow:0 0 10px #00ffd5;margin:0}
+    .mano-animada{width:28px;height:28px;animation:moverManoIzq 1s infinite alternate;transform:scaleX(-1)}
+    @keyframes moverManoIzq{0%{transform:scaleX(-1) translateX(0)}100%{transform:scaleX(-1) translateX(8px)}}
+    #openMenuBtn{font-size:28px;cursor:pointer;color:#00ffd5}
+    .container{max-width:1600px;width:100%;padding:20px;box-sizing:border-box;margin-top:60px}
+
+    /* ====== Menú lateral ====== */
+    #menuSlider{position:fixed;top:0;left:-250px;width:250px;height:100%;background:#191919;transition:left .3s ease-in-out;z-index:1000;padding:20px 15px;border-right:2px solid #00ffd5;box-shadow:4px 0 15px rgba(0,255,213,.2);overflow-y:auto}
+    #menuSlider.open{left:0}
+    .menu-item{display:inline-flex;color:#206d60;padding:12px 15px;font-size:18px;border-radius:8px;margin-bottom:10px;background:#2a2a2a;border:none;cursor:pointer;transition:background .3s}
+    .menu-item:hover{background:#00ffd5;color:#000}
+    .submenu{display:none;padding-left:15px;background:#1a1a1a;margin-bottom:15px;border-left:3px solid #00ffd5;border-radius:4px}
+    .submenu-button{font-size:15px;margin:8px 0;background:none;border:none;color:#aaa;cursor:pointer}
+    .submenu-button:hover{color:#00ffd5}
+
+    /* ====== Favoritos ====== */
+    #favorites-slider{display:flex;overflow-x:auto;gap:15px;padding:10px;background:#1f1f1f;border-radius:12px;max-width:100%;box-shadow:inset 0 0 20px rgba(0,255,213,.05);justify-content:center}
+    .favorite-item{position:relative;min-width:180px;background:#2a2a2a;padding:10px;border-radius:12px;text-align:center;transition:transform .3s ease-in-out;box-shadow:0 4px 10px rgba(0,255,213,.2)}
+    .favorite-item img{width:100%;height:auto;border-radius:10px;margin-bottom:5px;transition:opacity .3s}
+    .favorite-item:hover{transform:scale(1.1)}
+    .favorite-item:hover img{opacity:.8}
+    .channel-name{font-size:16px;font-weight:700;color:#fff;margin-top:10px}
+    .hover-content{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,255,213,.08);display:flex;justify-content:center;align-items:center;opacity:0;transition:opacity .3s;border-radius:12px}
+    .favorite-item:hover .hover-content{opacity:1}
+    .hover-content button{padding:8px 12px;background:#00ffd5;border:none;color:#000;font-weight:700;cursor:pointer;border-radius:6px}
+
+    /* ====== MONITOR grande y unificado (iframe + video) ====== */
+    .player-wrap{display:flex;justify-content:center;align-items:center;margin:20px auto 0;}
+    .player-media{
+      width: min(100%, var(--player-max));
+      aspect-ratio: 16 / 9;
+      height: auto;
+      border-radius:12px;
+      border:2px solid #00ffd5;
+      background:#000;
+      box-shadow:0 0 15px rgba(0,255,213,.3);
+      display:block;
+    }
+
+    .favorite-star{font-size:30px;color:gold;cursor:pointer;margin-top:15px;text-align:center;display:block;text-shadow:0 0 10px gold}
+    input[type="file"],select,button{display:flex;margin:10px 5px;padding:10px;border-radius:6px;border:none;background:#333;color:#fff}
+    button:hover{background:#00ffd5;color:#000}
+    h3{text-align:center;margin-top:30px;color:#00ffd5}
+    #category-list{display:flex;flex-direction:column;gap:8px}
+    .category-item{background:#2a2a2a;padding:10px;border-radius:8px}
+
+    /* ====== NUEVO: botones de tamaño en header ====== */
+    .size-toolbar{display:flex;gap:6px;align-items:center}
+    .size-btn{font-size:12px; padding:6px 10px; border-radius:8px; border:1px solid #233044;background:#1d2636; color:#cfe; cursor:pointer;}
+    .size-btn.active{background:#00ffd5; color:#000; font-weight:700; border-color:#00ffd5;}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <h1 class="titulo-app">
+      <svg class="mano-animada" xmlns="http://www.w3.org/2000/svg" fill="white" viewBox="0 0 24 24"><path d="M13.172 11H4a1 1 0 000 2h9.172l-3.586 3.586a1 1 0 101.414 1.414l5.293-5.293a1 1 0 000-1.414l-5.293-5.293a1 1 0 00-1.414 1.414L13.172 11z"/></svg>
+      Mi TV Station
+    </h1>
+
+    <div class="size-toolbar">
+      <button class="size-btn" data-size="s">S</button>
+      <button class="size-btn" data-size="m">M</button>
+      <button class="size-btn active" data-size="l">L</button>
+      <button class="size-btn" data-size="xl">XL</button>
+      <div id="openMenuBtn" onclick="toggleMenu()" title="Menú" style="margin-left:8px;font-size:28px;cursor:pointer;color:#00ffd5">&#9776;</div>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Menú lateral -->
+    <div id="menuSlider">
+      <h3>MENU</h3>
+      <button class="menu-item" onclick="toggleSubMenu('favorites')">Favoritos</button>
+      <div id="submenu-favorites" class="submenu">
+        <button class="submenu-button" onclick="showFavorites()">Ver Favoritos</button>
+      </div>
+
+      <button class="menu-item" onclick="toggleSubMenu('channels')">Canales</button>
+      <div id="submenu-channels" class="submenu">
+        <div id="category-list"></div>
+      </div>
+
+      <button class="menu-item" onclick="toggleSubMenu('settings')">Configuraciones</button>
+      <div id="submenu-settings" class="submenu">
+        <button class="submenu-button" onclick="regenerarCanalesInternos()">Regenerar Canales VOD Internos</button>
+        <button class="submenu-button" onclick="verCanalesInternos()">Ver Canales Internos</button>
+
+        <!-- NUEVO: Preferir que SIEMPRE pregunte -->
+        <label class="submenu-button" style="display:flex;gap:8px;align-items:center;cursor:pointer;">
+          <input type="checkbox" id="askEveryTimeToggle" />
+          <span>Siempre preguntar antes de abrir en ventana emergente</span>
+        </label>
+
+        <!-- NUEVO: Borrar preferencias por dominio -->
+        <button class="submenu-button" onclick="resetExternPrefs()">Borrar preferencias de ventana emergente</button>
+      </div>
+    </div>
+
+    <!-- Contenido principal -->
+    <div>
+      <input type="file" id="fileInput" accept=".json,.m3u">
+      <input type="text" id="buscador" placeholder="🔍 Buscar canal..." oninput="filtrarCanales()" style="width:100%;padding:10px;margin-bottom:10px;border-radius:8px;background:#222;color:#00ffd5;border:1px solid #00ffd5;">
+
+      <div>
+        <label for="channel-select">Canales:</label>
+        <select id="channel-select" onchange="playSelectedChannel()"></select>
+        <img id="channel-logo" style="width:100px;height:auto;margin-top:10px;border-radius:8px;display:none" />
+        <button onclick="addToFavorites()">Agregar a Favoritos</button>
+        <button onclick="showFavorites()">Ver Favoritos</button>
+      </div>
+
+      <!-- IFRAME para páginas -->
+      <div class="player-wrap">
+        <iframe id="iframePlayer" class="player-media" style="display:none;"
+                allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                referrerpolicy="no-referrer" loading="lazy"></iframe>
+      </div>
+
+      <!-- Acciones iframe -->
+      <div id="iframeActions" style="display:none;text-align:center;margin-top:10px;">
+        <button id="openExternBtn" style="padding:10px 14px;border:none;border-radius:8px;background:#00ffd5;color:#000;font-weight:bold;cursor:pointer;">
+          🔗 Abrir en pestaña nueva
+        </button>
+        <div id="iframeBlockedNote" style="margin-top:8px;color:#aaa;font-size:13px;display:none;">
+          ⚠️ Este sitio podría bloquear el embebido en iframe. Usa el botón para abrirlo aparte.
+        </div>
+        <div id="externPrefsRow" style="margin-top:10px;display:flex;gap:10px;align-items:center;justify-content:center;">
+          <label style="display:flex;gap:8px;align-items:center;cursor:pointer;">
+            <input type="checkbox" id="alwaysExternToggle" />
+            <span>Siempre abrir de este dominio <strong id="domainName" style="opacity:.8;"></strong></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Video -->
+      <div class="player-wrap">
+        <video id="videoPlayer" class="player-media" controls autoplay muted playsinline
+               poster="https://via.placeholder.com/1280x720?text=Cargando+video">
+          Tu navegador no soporta la reproducción de video en vivo.
+        </video>
+      </div>
+
+      <h3>📡 Canales precargados desde update.m3u:</h3>
+      <div id="contenedor-autocanales" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;"></div>
+      <div id="favorites-slider"></div>
+      <div class="favorite-star" onclick="addToFavorites()">★</div>
+    </div>
+  </div>
+
+  <script>
+    // ====== NUEVO: Selector de tamaño persistente ======
+    (function setupSizeSelector(){
+      const saved = localStorage.getItem('playerSize') || 'l';
+      document.documentElement.classList.add(`size-${saved}`);
+      const btns = [];
+      document.querySelectorAll('.size-btn').forEach(b=>{
+        btns.push(b);
+        if(b.dataset.size === saved) b.classList.add('active');
+        b.addEventListener('click', ()=>{
+          const sz = b.dataset.size;
+          document.documentElement.classList.remove('size-s','size-m','size-l','size-xl');
+          document.documentElement.classList.add(`size-${sz}`);
+          localStorage.setItem('playerSize', sz);
+          btns.forEach(x=>x.classList.toggle('active', x===b));
+        });
+      });
+    })();
+
+    // Estado
+    let favorites = [];
+    let categories = {};
+    let internalDatabase = [];
+    let channelsData = [];
+
+    // Utilidades básicas
+    function toggleMenu(){ document.getElementById('menuSlider').classList.toggle('open'); }
+    function normalizeCategory(title){ if(!title) return "sin_categoria"; return title.trim().toLowerCase().split(" ")[0]; }
+    function isHls(url){ return /\.m3u8(\?|#|$)/i.test(url); }
+    function isDirectMedia(url){ return /\.(mp4|m4v|mov|webm|ogg)(\?|#|$)/i.test(url); }
+    function isHttpPage(url){ try{ const u=new URL(url); return ['http:','https:'].includes(u.protocol) && !isHls(url) && !isDirectMedia(url); }catch{ return false; } }
+
+    // Preferencias por dominio (localStorage)
+    let externPrefs = {};
+    try{ externPrefs = JSON.parse(localStorage.getItem('externDomainPrefs')||'{}'); }catch(_){ externPrefs = {}; }
+    function getHost(url){ try{ return new URL(url).host; }catch{ return ''; } }
+    function shouldOpenExtern(host){ return !!externPrefs[host]; }
+    function setHostPreference(host,val){ if(!host) return; if(val) externPrefs[host]=true; else delete externPrefs[host]; localStorage.setItem('externDomainPrefs', JSON.stringify(externPrefs)); }
+
+    // === NUEVO: Preferencia global para "siempre preguntar"
+    let alwaysAskExtern = true;
+    try{
+      const raw = localStorage.getItem('alwaysAskExtern');
+      if(raw !== null) alwaysAskExtern = JSON.parse(raw);
+    }catch(_){ alwaysAskExtern = true; }
+
+    function setAlwaysAskExtern(val){
+      alwaysAskExtern = !!val;
+      localStorage.setItem('alwaysAskExtern', JSON.stringify(alwaysAskExtern));
+    }
+
+    // === NUEVO: Borrar todas las preferencias por dominio
+    function resetExternPrefs(){
+      externPrefs = {};
+      localStorage.removeItem('externDomainPrefs');
+      alert('✅ Preferencias de ventana emergente borradas. Volverá a preguntar por cada dominio.');
+    }
+
+    // === NUEVO: Inicializar el checkbox del submenú
+    function initAskEveryTimeUI(){
+      const t = document.getElementById('askEveryTimeToggle');
+      if(!t) return;
+      t.checked = !!alwaysAskExtern;
+      t.onchange = (e)=> setAlwaysAskExtern(e.target.checked);
+    }
+
+    // Botón externo + nota
+    function setOpenExtern(url, show, blocked=false){
+      const box=document.getElementById('iframeActions');
+      const btn=document.getElementById('openExternBtn');
+      const note=document.getElementById('iframeBlockedNote');
+      if(!box||!btn||!note) return;
+      if(show){
+        box.style.display='block';
+        btn.onclick=()=>window.open(url,'_blank','noopener,noreferrer');
+        note.style.display=blocked?'block':'none';
+      }else{
+        box.style.display='none';
+        note.style.display='none';
+        btn.onclick=null;
+      }
+    }
+    function setupExternUIFor(url, blocked=false){
+      const host=getHost(url);
+      const toggle=document.getElementById('alwaysExternToggle');
+      const labelDomain=document.getElementById('domainName');
+      if(labelDomain) labelDomain.textContent = host ? `(${host})` : '';
+      if(toggle){
+        toggle.checked=shouldOpenExtern(host);
+        toggle.onchange=(e)=>setHostPreference(host,e.target.checked);
+      }
+      setOpenExtern(url,true,blocked);
+    }
+
+    // Parser M3U
+    function parseM3U(content){
+      const lines = content.split('\n');
+      const channels = [];
+      let currentTitle = '', currentLogo = '';
+      lines.forEach((line,i)=>{
+        line=line.trim();
+        if(line.startsWith('#EXTINF')){
+          const titleMatch=line.match(/,(.*)$/);
+          currentTitle=titleMatch?titleMatch[1].trim():`Canal ${i}`;
+          const logoMatch=line.match(/tvg-logo="(.*?)"/i);
+          currentLogo=logoMatch?logoMatch[1]:'';
+        }else if(line && !line.startsWith('#')){
+          channels.push({ title: currentTitle || `Canal ${channels.length+1}`, url: line, thumbnail: currentLogo });
+          currentTitle=''; currentLogo='';
+        }
+      });
+      return channels;
+    }
+
+    // Carga y render base
+    function loadChannels(){
+      categories = {};
+      channelsData.forEach((channel,index)=>{
+        const title = channel.title || channel.name || channel.nombre || `Canal ${index+1}`;
+        channel.title = title.trim();
+        if(!channel.thumbnail){
+          channel.thumbnail = `https://via.placeholder.com/320x180?text=${encodeURIComponent(channel.title)}`;
+        }
+        const category = normalizeCategory(channel.title);
+        channel.category = category;
+        if(!categories[category]) categories[category]=[];
+        categories[category].push(channel);
+      });
+      renderCategories();
+      loadChannelDropdown();
+      renderAutoCargados();
+    }
+
+    // ✅ REESCRITA: renderCategories (DOM puro)
+    function renderCategories() {
+      const categoryList = document.getElementById('category-list');
+      categoryList.innerHTML = '';
+
+      for (const category in categories) {
+        const items = categories[category];
+        if (!items || items.length === 0) continue;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'category-item';
+
+        const btn = document.createElement('button');
+        btn.className = 'submenu-button';
+        btn.textContent = `${category} (${items.length} canal(es))`;
+        btn.addEventListener('click', () => toggleSubMenu(category));
+
+        const submenu = document.createElement('div');
+        submenu.id = `submenu-${category}`;
+        submenu.className = 'submenu';
+
+        items.forEach(ch => {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;margin-bottom:10px;';
+
+          const img = document.createElement('img');
+          const thumb = ch.thumbnail || `https://via.placeholder.com/100x60?text=${encodeURIComponent(ch.title)}`;
+          img.src = thumb;
+          img.alt = ch.title || '';
+          img.style.cssText = 'width:60px;height:40px;object-fit:contain;margin-right:8px;border-radius:4px;';
+
+          const right = document.createElement('div');
+          right.style.flexGrow = '1';
+
+          const play = document.createElement('button');
+          play.textContent = `▶ ${ch.title}`;
+          play.style.cssText = 'margin-bottom:5px;font-size:14px;';
+          play.addEventListener('click', () => playChannel(ch.url));
+
+          const br = document.createElement('br');
+
+          const fav = document.createElement('button');
+          fav.textContent = '+ Favorito';
+          fav.style.cssText = 'font-size:12px;';
+          fav.addEventListener('click', () => addToFavoritesFromSubMenu(ch.title, ch.url));
+
+          right.appendChild(play);
+          right.appendChild(br);
+          right.appendChild(fav);
+
+          row.appendChild(img);
+          row.appendChild(right);
+          submenu.appendChild(row);
+        });
+
+        wrapper.appendChild(btn);
+        wrapper.appendChild(submenu);
+        categoryList.appendChild(wrapper);
+      }
+    }
+
+    function toggleSubMenu(id){
+      const el=document.getElementById(`submenu-${id}`);
+      if(!el) return;
+      el.style.display = el.style.display==='block' ? 'none' : 'block';
+    }
+
+    function loadChannelDropdown(){
+      const sel=document.getElementById('channel-select');
+      const logo=document.getElementById('channel-logo');
+      sel.innerHTML='';
+      channelsData.forEach((ch,i)=>{
+        const opt=document.createElement('option');
+        opt.value=i; opt.textContent=ch.title;
+        sel.appendChild(opt);
+      });
+      if(channelsData[0]?.thumbnail){ logo.src=channelsData[0].thumbnail; logo.style.display='block'; } else { logo.style.display='none'; }
+    }
+
+    function renderAutoCargados(){
+      const cont=document.getElementById('contenedor-autocanales');
+      cont.innerHTML='';
+      channelsData.forEach(ch=>{
+        const card=document.createElement('div');
+        card.style.cssText='width:180px;background:#2a2a2a;border-radius:12px;padding:10px;text-align:center;box-shadow:0 4px 10px rgba(0,255,213,.2)';
+        const img=document.createElement('img');
+        img.src= ch.thumbnail || `https://via.placeholder.com/320x180?text=${encodeURIComponent(ch.title)}`;
+        img.style.cssText='width:100%;border-radius:8px;margin-bottom:8px';
+        const name=document.createElement('div');
+        name.textContent=ch.title; name.style.cssText='color:#fff;font-size:14px;margin-bottom:5px';
+        const btn=document.createElement('button');
+        btn.textContent='▶️ Play'; btn.style.cssText='background:#00ffd5;color:#000;border:none;padding:5px 10px;border-radius:6px;cursor:pointer';
+        btn.onclick=()=>playChannel(ch.url);
+        card.append(img,name,btn); cont.appendChild(card);
+      });
+    }
+
+    // Favoritos
+    function addToFavorites(){
+      const idx=document.getElementById('channel-select').value;
+      if(idx!==""){
+        const ch=channelsData[idx];
+        if(!ch.thumbnail) ch.thumbnail=`https://via.placeholder.com/320x180?text=${encodeURIComponent(ch.title)}`;
+        favorites.push(ch);
+        alert(`Agregado a favoritos: ${ch.title}`);
+      }
+    }
+    function addToFavoritesFromSubMenu(title,url){
+      const ch=channelsData.find(c=>c.title===title && c.url===url);
+      if(ch){
+        if(!ch.thumbnail) ch.thumbnail=`https://via.placeholder.com/320x180?text=${encodeURIComponent(ch.title)}`;
+        favorites.push(ch);
+        alert(`Agregado a favoritos: ${ch.title}`);
+      }
+    }
+
+    // ✅ REESCRITA: showFavorites (DOM puro)
+    function showFavorites(){
+      const slider=document.getElementById('favorites-slider');
+      slider.innerHTML='';
+      favorites.forEach(ch=>{
+        const card=document.createElement('div');
+        card.className='favorite-item';
+
+        const preview=document.createElement('div');
+        Object.assign(preview.style,{width:'320px',height:'180px',borderRadius:'10px',overflow:'hidden',display:'flex',justifyContent:'center',alignItems:'center',background:'#000'});
+
+        if(ch.thumbnail){
+          const img=document.createElement('img');
+          img.src=ch.thumbnail; img.alt=ch.title;
+          Object.assign(img.style,{maxWidth:'100%',maxHeight:'100%',objectFit:'contain',borderRadius:'10px'});
+          preview.appendChild(img);
+        }else{
+          Object.assign(preview.style,{background:'linear-gradient(135deg,#00ffd5,#0f0f0f)',color:'#000',fontWeight:'bold',fontSize:'18px',animation:'pulse 2s infinite'});
+          preview.textContent=ch.title;
+        }
+
+        const name=document.createElement('div');
+        name.className='channel-name'; name.textContent=ch.title;
+
+        const hover=document.createElement('div');
+        hover.className='hover-content';
+        const playBtn=document.createElement('button');
+        playBtn.textContent='▶ Play';
+        playBtn.addEventListener('click',()=>playChannel(ch.url));
+        hover.appendChild(playBtn);
+
+        card.append(preview,name,hover);
+        slider.appendChild(card);
+      });
+    }
+
+    // Reproductor unificado
+    function playChannel(url){
+      const video=document.getElementById('videoPlayer');
+      const iframe=document.getElementById('iframePlayer');
+
+      if(window.hls){ try{window.hls.destroy();}catch(e){} window.hls=null; }
+
+      if(isHls(url)){
+        iframe.style.display='none'; iframe.src='about:blank'; setOpenExtern(url,false);
+        if(Hls.isSupported()){ const hls=new Hls(); hls.loadSource(url); hls.attachMedia(video); window.hls=hls; }
+        else if(video.canPlayType('application/vnd.apple.mpegurl')){ video.src=url; }
+        else alert('Este navegador no soporta HLS');
+        video.style.display='block'; video.play().catch(()=>{});
+        return;
+      }
+
+      if(isDirectMedia(url)){
+        iframe.style.display='none'; iframe.src='about:blank'; setOpenExtern(url,false);
+        video.src=url; video.style.display='block'; video.play().catch(()=>{});
+        return;
+      }
+
+      if(isHttpPage(url)){
+        const host = getHost(url);
+
+        // Si hay preferencia por dominio pero la global dice "preguntar", preguntamos cada vez
+        if(shouldOpenExtern(host) && alwaysAskExtern){
+          const resp = confirm(
+            `Este dominio (${host}) está marcado para abrir SIEMPRE en ventana emergente.\n\n` +
+            `¿Quieres abrir en ventana emergente esta vez?\n\n` +
+            `Aceptar = Abrir emergente\nCancelar = Intentar abrir aquí (iframe)`
+          );
+          if(resp){
+            window.open(url,'_blank','noopener,noreferrer');
+            iframe.style.display='none'; iframe.src='about:blank'; setOpenExtern(url,false);
+            video.pause(); video.style.display='none'; video.removeAttribute('src');
+            return;
+          }
+          // Si elige Cancelar, intentamos iframe (no borramos la preferencia)
+        } else if(shouldOpenExtern(host) && !alwaysAskExtern){
+          // Respetar "siempre emergente" sin preguntar
+          window.open(url,'_blank','noopener,noreferrer');
+          iframe.style.display='none'; iframe.src='about:blank'; setOpenExtern(url,false);
+          video.pause(); video.style.display='none'; video.removeAttribute('src');
+          return;
+        }
+
+        // === Intentar embebido en iframe ===
+        video.pause(); video.style.display='none'; video.removeAttribute('src');
+        iframe.style.display='block'; iframe.src=url;
+        setupExternUIFor(url,false);
+
+        setTimeout(()=>{
+          let blocked=false;
+          try{ const doc=iframe.contentDocument; blocked=!doc; }catch(e){ blocked=true; }
+          if(blocked){
+            setupExternUIFor(url,true);
+            if(!shouldOpenExtern(host)){
+              const ok=confirm(
+                `Parece que ${host} bloquea el iframe.\n` +
+                `¿Quieres abrir SIEMPRE este dominio en pestaña nueva a partir de ahora?`
+              );
+              if(ok){ setHostPreference(host,true); window.open(url,'_blank','noopener,noreferrer'); }
+            }
+          }
+        },1200);
+        return;
+      }
+
+      alert('Tipo de enlace no reconocido. Abriendo en nueva pestaña…');
+      window.open(url,'_blank','noopener,noreferrer');
+    }
+
+    function playSelectedChannel(){
+      const idx=document.getElementById('channel-select').value;
+      const ch=channelsData[idx];
+      const logo=document.getElementById('channel-logo');
+      if(ch && ch.url){
+        playChannel(ch.url);
+        if(ch.thumbnail){ logo.src=ch.thumbnail; logo.style.display='block'; } else { logo.style.display='none'; }
+      }
+    }
+
+    // Lector de archivos
+    document.getElementById('fileInput').addEventListener('change',e=>{
+      const file=e.target.files[0]; if(!file) return;
+      const reader=new FileReader();
+      reader.onload=function(ev){
+        const content=ev.target.result.trim();
+        const name=file.name.toLowerCase();
+
+        if(name.endsWith('.json')){
+          try{
+            const parsed=JSON.parse(content);
+            if(Array.isArray(parsed)) channelsData=parsed;
+            else if(parsed.channels && Array.isArray(parsed.channels)) channelsData=parsed.channels;
+            else if(parsed.lista && Array.isArray(parsed.lista)) channelsData=parsed.lista;
+            else { alert('Formato de JSON no reconocido.'); return; }
+            console.log('✅ JSON cargado:',channelsData); loadChannels();
+          }catch(err){ alert('❌ Error al leer el archivo JSON'); }
+        }else if(name.endsWith('.m3u')){
+          try{ channelsData=parseM3U(content); console.log('✅ M3U cargado:',channelsData); loadChannels(); }
+          catch(err){ alert('❌ Error al procesar el archivo M3U'); }
+        }else{
+          alert('❌ Tipo de archivo no soportado. Usa .json o .m3u');
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    function regenerarCanalesInternos(){
+      if(!confirm('¿Estás seguro que deseas borrar y regenerar los 1000 canales internos?')) return;
+      const generated=[...Array(1000)].map((_,i)=>({
+        name:`Canal ${i+1}`, title:`VOD Canal ${i+1}`, url:`https://vod.mycamtv.net/${i+1}.m3u8`,
+        category:`VOD Categoria ${(i%10)+1}`, thumbnail:`https://via.placeholder.com/320x180?text=VOD+${i+1}`
+      }));
+      localStorage.setItem('internalDatabase', JSON.stringify(generated));
+      internalDatabase=generated; channelsData=[...internalDatabase]; loadChannels();
+      alert('✅ Canales VOD regenerados.');
+    }
+
+    function verCanalesInternos(){
+      if(!internalDatabase || internalDatabase.length===0){ alert('⚠ No hay canales internos cargados. Primero regénéralos.'); return; }
+      channelsData=[...internalDatabase]; loadChannels(); alert('✅ Mostrando canales internos VOD.');
+    }
+
+    function filtrarCanales(){
+      const q=document.getElementById('buscador').value.toLowerCase();
+      const sel=document.getElementById('channel-select');
+      sel.innerHTML='';
+      channelsData.forEach((ch,i)=>{
+        if(ch.title.toLowerCase().includes(q)){
+          const opt=document.createElement('option'); opt.value=i; opt.textContent=ch.title; sel.appendChild(opt);
+        }
+      });
+    }
+
+    // Auto-carga de update3.m3u + init del toggle "siempre preguntar"
+    window.addEventListener('DOMContentLoaded',()=>{
+      initAskEveryTimeUI();
+      fetch('update3.m3u')
+        .then(res=>res.text())
+        .then(text=>{
+          if(text.includes('#EXTM3U')){
+            channelsData=parseM3U(text);
+            console.log('🔍 Canales detectados:',channelsData);
+            loadChannels();
+          }else{
+            console.warn('⚠ El archivo no parece ser un M3U válido');
+          }
+        })
+        .catch(err=>console.warn('❌ No se pudo cargar update3.m3u:',err));
+    });
+  </script>
+</body>
+</html>
